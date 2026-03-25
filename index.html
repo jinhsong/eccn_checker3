@@ -3,655 +3,572 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ECCN AI Classifier</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+KR:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<title>ECCN Classifier — Rule-Based</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body {
-    min-height:100vh; background:#0c0a14;
-    font-family:'Pretendard','Noto Sans KR','Inter',sans-serif;
-    color:#e8e0ff;
-  }
-  @keyframes spin { to { transform:rotate(360deg); } }
-  @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-  @keyframes glow { 0%,100% { box-shadow:0 0 20px rgba(124,58,237,0.3); } 50% { box-shadow:0 0 40px rgba(124,58,237,0.5); } }
-  .card { animation:fadeUp 0.4s ease-out; }
-  .btn-primary {
-    background:linear-gradient(135deg,#7c3aed,#6d28d9); color:#fff; border:none; padding:10px 22px;
-    border-radius:8px; font-weight:600; cursor:pointer; font-size:14px; transition:all 0.2s;
-    font-family:inherit;
-  }
-  .btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 16px rgba(124,58,237,0.4); }
-  .btn-primary:disabled { opacity:0.4; cursor:not-allowed; transform:none; box-shadow:none; }
-  .btn-secondary {
-    background:rgba(255,255,255,0.06); color:#c4b5fd; border:1px solid rgba(167,139,250,0.2);
-    padding:8px 18px; border-radius:8px; font-weight:500; cursor:pointer; font-size:13px;
-    transition:all 0.2s; font-family:inherit;
-  }
-  .btn-secondary:hover { background:rgba(255,255,255,0.1); border-color:rgba(167,139,250,0.4); }
-  .input-field {
-    width:100%; padding:10px 14px; background:rgba(255,255,255,0.05); border:1px solid rgba(167,139,250,0.15);
-    border-radius:8px; color:#e8e0ff; font-size:14px; outline:none; transition:border-color 0.2s;
-    font-family:inherit;
-  }
-  .input-field:focus { border-color:#7c3aed; }
-  .input-field::placeholder { color:#555; }
-  .badge { display:inline-block; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600; }
-  .badge-high { background:rgba(239,68,68,0.15); color:#fca5a5; }
-  .badge-medium { background:rgba(251,191,36,0.15); color:#fde68a; }
-  .badge-low { background:rgba(74,222,128,0.15); color:#86efac; }
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#08070e;--surface:rgba(255,255,255,0.028);--surface2:rgba(255,255,255,0.05);
+  --border:rgba(140,120,200,0.1);--border2:rgba(140,120,200,0.2);
+  --accent:#8b5cf6;--accent2:#a78bfa;--accent3:#c4b5fd;
+  --gold:#f59e0b;--gold2:#fbbf24;--gold3:#fde68a;
+  --red:#ef4444;--green:#4ade80;--green2:#86efac;
+  --text:#ddd6fe;--text2:#a8a0c8;--text3:#6b6490;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'DM Sans','Noto Sans KR',sans-serif;
+}
+body{min-height:100vh;background:var(--bg);font-family:var(--sans);color:var(--text);overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(139,92,246,0.08),transparent 70%);pointer-events:none;z-index:0;}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes glow{0%,100%{box-shadow:0 0 24px rgba(139,92,246,0.2)}50%{box-shadow:0 0 48px rgba(139,92,246,0.4)}}
+
+.container{max-width:820px;margin:0 auto;padding:28px 18px;position:relative;z-index:1;}
+.header{text-align:center;margin-bottom:36px;animation:fadeUp .6s ease-out;}
+.header-badge{display:inline-flex;align-items:center;gap:10px;padding:10px 24px;border-radius:44px;background:linear-gradient(135deg,rgba(139,92,246,0.12),rgba(99,102,241,0.08));border:1px solid rgba(139,92,246,0.2);margin-bottom:8px;}
+.header-title{font-size:22px;font-weight:700;letter-spacing:-.5px;background:linear-gradient(135deg,var(--accent3),var(--accent),#6d28d9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.header-sub{color:var(--text3);font-size:12px;line-height:1.5;}
+
+.steps{display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:32px;flex-wrap:wrap;}
+.step-item{display:flex;align-items:center;}
+.step-node{display:flex;flex-direction:column;align-items:center;min-width:60px;}
+.step-circle{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;transition:all .35s;border:2px solid transparent;}
+.step-circle.done{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;}
+.step-circle.active{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#fff;border-color:var(--gold2);box-shadow:0 0 14px rgba(245,158,11,.35);}
+.step-circle.pending{background:rgba(255,255,255,.04);color:var(--text3);}
+.step-label{font-size:10px;margin-top:4px;white-space:nowrap;}
+.step-label.done,.step-label.active{color:var(--text);}
+.step-label.pending{color:var(--text3);}
+.step-line{width:30px;height:2px;margin:0 2px;margin-bottom:18px;border-radius:1px;}
+.step-line.done{background:var(--accent);}
+.step-line.pending{background:rgba(255,255,255,.06);}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:18px;animation:fadeUp .4s ease-out;}
+.card-title{font-size:15px;font-weight:600;color:var(--accent3);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+
+.field{margin-bottom:14px;}
+.field-label{display:block;font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:500;}
+.field-label .req{color:var(--red);margin-left:2px;}
+input.inp,select.inp{
+  width:100%;padding:10px 14px;background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:14px;outline:none;transition:border-color .2s;font-family:var(--sans);
+}
+input.inp:focus{border-color:var(--accent);}
+input.inp::placeholder{color:var(--text3);}
+
+.btn{padding:10px 22px;border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;transition:all .2s;font-family:var(--sans);border:none;display:inline-flex;align-items:center;gap:6px;}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#6d28d9);color:#fff;}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(139,92,246,.35);}
+.btn-primary:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none;}
+.btn-ghost{background:rgba(255,255,255,.04);color:var(--accent3);border:1px solid var(--border);}
+.btn-ghost:hover{background:rgba(255,255,255,.07);border-color:var(--border2);}
+.btn-row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+
+.cand{display:flex;align-items:flex-start;gap:12px;padding:10px 14px;background:rgba(255,255,255,.015);border-radius:10px;border:1px solid rgba(255,255,255,.04);margin-bottom:6px;transition:background .2s;}
+.cand:hover{background:rgba(255,255,255,.035);}
+.cand-eccn{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--accent2);min-width:80px;flex-shrink:0;}
+.cand-body{flex:1;min-width:0;}
+.cand-title{font-size:13px;font-weight:500;margin-bottom:2px;}
+.cand-reason{font-size:11px;color:var(--text3);}
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;}
+.badge-high{background:rgba(239,68,68,.12);color:#fca5a5;}
+.badge-medium{background:rgba(251,191,36,.12);color:#fde68a;}
+.badge-low{background:rgba(74,222,128,.12);color:#86efac;}
+
+.param-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.015);border-radius:8px;margin-bottom:6px;flex-wrap:wrap;}
+.param-info{flex:1 1 180px;min-width:140px;}
+.param-name{font-size:12px;font-weight:500;}
+.param-thresh{font-size:10px;color:var(--text3);}
+.param-input{display:flex;align-items:center;gap:6px;flex:0 0 auto;}
+.param-unit{font-size:11px;color:var(--text3);min-width:50px;}
+.param-status{font-size:9px;padding:2px 7px;border-radius:4px;font-weight:600;}
+.param-pass{background:rgba(74,222,128,.1);color:var(--green);}
+.param-fail{background:rgba(239,68,68,.1);color:#fca5a5;}
+.param-na{background:rgba(255,255,255,.05);color:var(--text3);}
+
+.result-card{background:linear-gradient(135deg,rgba(139,92,246,.06),rgba(99,102,241,.04));border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:28px;margin-bottom:18px;animation:glow 4s ease-in-out infinite;}
+.result-eccn{font-size:40px;font-weight:800;font-family:var(--mono);letter-spacing:1px;background:linear-gradient(135deg,var(--gold),var(--gold2),#d97706);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;}
+.result-section{padding:12px 14px;background:rgba(0,0,0,.2);border-radius:10px;margin-bottom:10px;}
+.result-section-title{font-size:12px;font-weight:600;color:var(--accent3);margin-bottom:4px;}
+.result-section-text{font-size:13px;color:#bbb;line-height:1.65;}
+
+.eccn-group{margin-bottom:14px;}
+.eccn-group-header{font-size:13px;font-weight:600;color:var(--gold);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.eccn-tag{font-family:var(--mono);background:rgba(245,158,11,.1);padding:2px 8px;border-radius:4px;font-size:12px;}
+
+.case-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+.case-table th{padding:6px 10px;text-align:left;color:var(--accent3);font-weight:600;font-size:11px;border-bottom:1px solid var(--border);}
+.case-table td{padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.03);}
+.case-eccn{background:rgba(139,92,246,.2);padding:2px 8px;border-radius:4px;color:var(--accent3);font-family:var(--mono);font-size:11px;}
+
+.footer{text-align:center;margin-top:40px;padding:18px 0;border-top:1px solid rgba(255,255,255,.04);font-size:10px;color:var(--text3);line-height:1.6;}
+
+@media(max-width:600px){
+  .container{padding:16px 12px;}
+  .cand{flex-wrap:wrap;}.cand-eccn{min-width:auto;}
+  .param-row{flex-direction:column;align-items:flex-start;}
+  .param-input{width:100%;}.param-input input{flex:1;}
+}
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div class="container" id="app"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+// ECCN DATABASE + DECISION TREE ENGINE
+// ═══════════════════════════════════════════════════════════
 
-<script type="text/babel">
-const { useState, useRef, useEffect } = React;
-
-const STEP_LABELS = [
-  "품목 입력",
-  "ECCN 후보군",
-  "파라미터 추출",
-  "파라미터 값 확인",
-  "최종 Classification",
-];
+const ECCN_DB = {
+  "3A090": {
+    title: "Advanced computing ICs (high-end AI/HPC)",
+    category: "3", keywords: ["gpu","ai accelerator","ai chip","tpu","npu","machine learning","deep learning","neural","datacenter gpu","hpc gpu","training chip","inference chip","가속기","인공지능칩","ai 칩"],
+    params: [
+      { name: "Total Processing Performance (TPP)", key: "tpp", unit: "TOPS (INT8)", threshold: 4800, op: ">", desc: "INT8 이론 처리 성능 합산" },
+      { name: "Performance Density (PD)", key: "pd", unit: "TOPS/mm²", threshold: 5.92, op: ">", desc: "TPP ÷ 총 다이 면적" }
+    ],
+    logic: v => v.tpp > 4800,
+    notes: "Advanced Computing FET rule (Oct 2022, Jan 2025 개정). TPP가 4800 TOPS를 초과하는 집적회로.",
+    restrictions: "Entity List 제한. 중국/마카오/D:5 국가 라이선스 필수. License Exception 없음.",
+  },
+  "3A090.a": {
+    title: "Advanced computing ICs (mid-tier)",
+    category: "3", keywords: ["gpu","consumer gpu","gaming gpu","ai chip","geforce","radeon","consumer accelerator","게이밍 gpu"],
+    params: [
+      { name: "Total Processing Performance (TPP)", key: "tpp", unit: "TOPS (INT8)", threshold: 1600, op: ">", desc: "INT8 이론 처리 성능" },
+    ],
+    logic: v => v.tpp > 1600 && v.tpp <= 4800,
+    notes: "TPP 1600~4800 범위. 특정 목적지 통보 의무.",
+    restrictions: "BIS 통보 필요. Country Group D:5 제한.",
+  },
+  "4A090": {
+    title: "3A090 IC를 포함하는 컴퓨터 시스템",
+    category: "4", keywords: ["ai server","gpu server","hpc system","dgx","hgx","ai workstation","training server","ai 서버","학습서버","gpu 서버"],
+    params: [
+      { name: "Contains 3A090 IC", key: "has_3a090", unit: "1=yes/0=no", threshold: 1, op: "=", desc: "3A090 분류 IC 탑재 여부" },
+      { name: "System total TPP", key: "system_tpp", unit: "TOPS", threshold: 4800, op: ">", desc: "시스템 내 모든 IC의 TPP 합산" }
+    ],
+    logic: v => v.has_3a090 == 1 || v.system_tpp > 4800,
+    notes: "3A090 분류 IC가 탑재된 서버/시스템. DGX, HGX 등.",
+    restrictions: "3A090과 동일한 제한 적용. 통제 목적지 라이선스 필수.",
+  },
+  "3A001": {
+    title: "통제 전자부품 (FPGA, ASIC, DSP 등)",
+    category: "3", keywords: ["fpga","programmable logic","asic","custom ic","gate array","microprocessor","mcu","dsp","signal processor","adc","dac","converter","전자부품","프로그래머블"],
+    params: [
+      { name: "Gate count (FPGA/PLD)", key: "gate_count", unit: "gates", threshold: 700000, op: ">", desc: "사용자 프로그래머블 게이트 수" },
+      { name: "Processing speed", key: "proc_speed", unit: "GFLOPS", threshold: 200, op: ">", desc: "부동소수점 처리 속도" },
+      { name: "ADC/DAC speed", key: "speed_msps", unit: "MSPS", threshold: 1000, op: ">", desc: "샘플링 레이트" }
+    ],
+    logic: v => (v.gate_count > 700000) || (v.speed_msps > 1000) || (v.proc_speed > 200),
+    notes: "통제 전자부품 일반. 하위 항목별 세부 threshold 상이.",
+    restrictions: "대부분 통제 목적지 라이선스 필요. AT/NS 통제 사유.",
+  },
+  "3A002": {
+    title: "전자 측정/검사 장비",
+    category: "3", keywords: ["oscilloscope","spectrum analyzer","signal analyzer","network analyzer","test equipment","측정기","오실로스코프","분석기","logic analyzer","계측기"],
+    params: [
+      { name: "Bandwidth", key: "bandwidth_ghz", unit: "GHz", threshold: 4, op: ">", desc: "실시간 대역폭" },
+      { name: "Sample rate", key: "sample_rate_gsps", unit: "GSPS", threshold: 10, op: ">", desc: "샘플링 레이트" }
+    ],
+    logic: v => v.bandwidth_ghz > 4 || v.sample_rate_gsps > 10,
+    notes: "통제 측정장비. 장비 유형별 threshold 상이.",
+    restrictions: "NS/AT 통제. D:1 국가 라이선스 필요.",
+  },
+  "3A991": {
+    title: "3A001 비통제 전자부품",
+    category: "3", keywords: ["ic","integrated circuit","semiconductor","chip","general electronics","일반 반도체","집적회로","칩"],
+    params: [
+      { name: "Gate count", key: "gate_count", unit: "gates", threshold: 700000, op: "<=", desc: "3A001 기준 미달" }
+    ],
+    logic: v => v.gate_count > 0 && v.gate_count <= 700000,
+    notes: "AT 통제 품목. 하위 등급 전자부품.",
+    restrictions: "AT-only. E:1/E:2 국가에만 라이선스 필요.",
+  },
+  "4A003": {
+    title: "고성능 디지털 컴퓨터",
+    category: "4", keywords: ["computer","server","supercomputer","hpc","cluster","high performance computing","컴퓨터","서버","슈퍼컴퓨터","고성능"],
+    params: [
+      { name: "Adjusted Peak Performance (APP)", key: "app_wtops", unit: "WT", threshold: 29, op: ">", desc: "가중 TeraOPS" }
+    ],
+    logic: v => v.app_wtops > 29,
+    notes: "일반 고성능 컴퓨팅 장비.",
+    restrictions: "NS/AT. APP 값과 목적지에 따른 단계별 라이선스.",
+  },
+  "4A994": {
+    title: "4A003 비통제 컴퓨터",
+    category: "4", keywords: ["general computer","desktop","laptop","workstation","standard server","일반 컴퓨터","데스크톱","노트북","범용 서버","pc"],
+    params: [
+      { name: "APP below threshold", key: "app_wtops", unit: "WT", threshold: 29, op: "<=", desc: "통제 기준 미달" }
+    ],
+    logic: v => !v.app_wtops || v.app_wtops <= 29,
+    notes: "일반 컴퓨터. EAR99 동등 수준.",
+    restrictions: "AT-only. 대부분 목적지 제한 없음.",
+  },
+  "5A002": {
+    title: "정보보안 시스템/장비 (암호화)",
+    category: "5", keywords: ["encryption","cryptographic","crypto","aes","rsa","vpn","ipsec","ssl","tls","cipher","보안","암호","암호화","암호칩","security"],
+    params: [
+      { name: "Symmetric key length", key: "key_sym", unit: "bits", threshold: 56, op: ">", desc: "대칭 알고리즘 키 길이" },
+      { name: "Asymmetric key length", key: "key_asym", unit: "bits", threshold: 512, op: ">", desc: "비대칭 알고리즘 키 길이" },
+      { name: "Custom/proprietary crypto", key: "custom_crypto", unit: "1=yes/0=no", threshold: 1, op: "=", desc: "비표준 자체 암호화" }
+    ],
+    logic: v => v.key_sym > 56 || v.key_asym > 512 || v.custom_crypto == 1,
+    notes: "암호화 기능 탑재 품목. 대중시장 암호화는 License Exception ENC 가능.",
+    restrictions: "EI/NS 통제. License Exception ENC (§740.17) 적용 가능 (분류 신청 후).",
+  },
+  "5A992": {
+    title: "5A002 비통제 정보보안 장비",
+    category: "5", keywords: ["basic encryption","mass market crypto","consumer encryption","일반 보안","대중 보안"],
+    params: [
+      { name: "Mass market encryption", key: "mass_market", unit: "1=yes/0=no", threshold: 1, op: "=", desc: "대중시장 제품 여부" }
+    ],
+    logic: v => v.mass_market == 1,
+    notes: "대중시장 암호화 및 제한적 암호 기능 장비.",
+    restrictions: "AT-only.",
+  },
+  "5A001": {
+    title: "통신 시스템/장비",
+    category: "5", keywords: ["telecom","communication","radio","transmitter","receiver","transceiver","antenna","radar","통신","레이더","안테나","무선","송신기","수신기"],
+    params: [
+      { name: "Max frequency", key: "freq_ghz", unit: "GHz", threshold: 31, op: ">", desc: "최대 동작 주파수" },
+      { name: "Bandwidth", key: "bw_mhz", unit: "MHz", threshold: 2000, op: ">", desc: "순시 대역폭" }
+    ],
+    logic: v => v.freq_ghz > 31 || v.bw_mhz > 2000,
+    notes: "통제 통신장비. 다양한 하위 항목.",
+    restrictions: "NS/AT/RS 통제.",
+  },
+  "6A003": {
+    title: "카메라 및 영상 시스템 (열화상/IR)",
+    category: "6", keywords: ["thermal camera","infrared","ir camera","flir","night vision","imaging sensor","focal plane array","열화상","적외선","야간투시","fpa","ir 카메라","열상"],
+    params: [
+      { name: "Detector elements", key: "detector_elements", unit: "elements", threshold: 0, op: ">", desc: "IR 검출 소자 수" },
+      { name: "NETD (sensitivity)", key: "netd_mk", unit: "mK", threshold: 50, op: "<", desc: "등가잡음온도차 (낮을수록 고감도)" },
+      { name: "Detection wavelength", key: "wavelength_um", unit: "μm", threshold: 0.9, op: ">=", desc: "IR 검출 파장" }
+    ],
+    logic: v => v.detector_elements > 0 && v.wavelength_um >= 0.9,
+    notes: "적외선/열화상 이미징. 냉각/비냉각, 스펙트럼 대역별 threshold 상이.",
+    restrictions: "NS/MT/RS 통제. MWIR/LWIR 저 NETD 엄격 통제.",
+  },
+  "6A005": {
+    title: "레이저 및 레이저 부품",
+    category: "6", keywords: ["laser","fiber laser","solid state laser","pulsed laser","cw laser","laser diode","레이저","광섬유 레이저","고출력 레이저"],
+    params: [
+      { name: "CW output power", key: "cw_power_w", unit: "W", threshold: 10, op: ">", desc: "연속파 출력" },
+      { name: "Pulse energy", key: "pulse_energy_j", unit: "J", threshold: 1.5, op: ">", desc: "펄스 에너지" }
+    ],
+    logic: v => v.cw_power_w > 10 || v.pulse_energy_j > 1.5,
+    notes: "다양한 레이저 유형. 유형/파장별 threshold 상이.",
+    restrictions: "NS/AT 통제. 일부 MT(미사일기술) 통제.",
+  },
+  "1C350": {
+    title: "독성 화학작용제 전구체 화학물질",
+    category: "1", keywords: ["chemical","precursor","toxic agent","chemical weapon","cwc","화학물질","전구체","화학무기"],
+    params: [
+      { name: "CAS number match", key: "cas_match", unit: "1=yes/0=no", threshold: 1, op: "=", desc: "통제 목록 CAS 번호 일치 여부" }
+    ],
+    logic: v => v.cas_match == 1,
+    notes: "화학무기협약(CWC) 관련 화학물질.",
+    restrictions: "CB/CW 통제. 매우 엄격한 라이선스.",
+  },
+  "2B001": {
+    title: "금속 절삭/성형 공작기계",
+    category: "2", keywords: ["cnc","machine tool","milling","turning","grinding","lathe","공작기계","밀링","선반","cnc 머신","가공기","연삭기"],
+    params: [
+      { name: "Positioning accuracy", key: "accuracy_um", unit: "μm", threshold: 6, op: "<", desc: "선형 위치결정 정밀도 (낮을수록 통제)" },
+      { name: "Simultaneous axes", key: "axes", unit: "axes", threshold: 5, op: ">=", desc: "동시 윤곽 제어 축 수" }
+    ],
+    logic: v => v.accuracy_um < 6 || v.axes >= 5,
+    notes: "고정밀 공작기계. 5축 이상 또는 고정밀도 시 통제.",
+    restrictions: "NS/NP 통제. D:1 및 일부 D:2 국가 라이선스.",
+  },
+  "7A003": {
+    title: "관성항법 시스템(INS) 및 부품",
+    category: "7", keywords: ["ins","inertial navigation","gyroscope","accelerometer","imu","ring laser gyro","fog","관성항법","자이로","가속도계","imu","관성"],
+    params: [
+      { name: "Gyro bias stability", key: "gyro_bias", unit: "°/hr", threshold: 0.5, op: "<", desc: "낮을수록 고정밀" },
+      { name: "Accelerometer bias", key: "accel_bias", unit: "mg", threshold: 0.5, op: "<", desc: "낮을수록 고정밀" }
+    ],
+    logic: v => v.gyro_bias < 0.5 || v.accel_bias < 0.5,
+    notes: "관성 측정/항법. 정밀도에 따라 통제 수준 결정.",
+    restrictions: "NS/MT 통제. 미사일기술 핵심 품목.",
+  },
+  "9A004": {
+    title: "로켓/우주 발사체 시스템",
+    category: "9", keywords: ["rocket","space launch","propulsion","thruster","로켓","우주발사","추진","발사체"],
+    params: [
+      { name: "Total impulse", key: "total_impulse", unit: "MN·s", threshold: 1.1, op: ">", desc: "총 추력량" }
+    ],
+    logic: v => v.total_impulse > 1.1,
+    notes: "우주발사 및 관측로켓 시스템.",
+    restrictions: "MT/NS 통제. MTCR Category I 품목.",
+  },
+  "EAR99": {
+    title: "CCL 미등재 EAR 대상 품목",
+    category: "N/A", keywords: [],
+    params: [],
+    logic: () => true,
+    notes: "EAR 대상이나 CCL에 특정 기재되지 않은 품목. 대부분의 상용 품목이 해당.",
+    restrictions: "일반적으로 NLR (No License Required). 엠바고/제재 제한은 적용.",
+  }
+};
 
 const KNOWN_CASES = [
-  { product: "NVIDIA A100", eccn: "3A090", reason: "TPP > 4800 TOPS, PD > 600 W" },
-  { product: "NVIDIA H100", eccn: "3A090", reason: "TPP > 4800 TOPS, PD > 700 W" },
-  { product: "NVIDIA A800", eccn: "3A090.a", reason: "Export control compliant variant, reduced interconnect" },
-  { product: "NVIDIA H800", eccn: "3A090.a", reason: "China-specific variant with reduced NVLink bandwidth" },
-  { product: "NVIDIA L40", eccn: "4A090", reason: "TPP > 4800 TOPS but PD ≤ 600W threshold" },
-  { product: "NVIDIA RTX 4090", eccn: "3A090.a", reason: "Consumer GPU, TPP > 1600 TOPS, high performance density" },
-  { product: "AMD MI250X", eccn: "3A090", reason: "TPP exceeds threshold for HPC/AI accelerator" },
-  { product: "AMD MI300X", eccn: "3A090", reason: "TPP significantly exceeds 4800 threshold" },
-  { product: "Intel Gaudi2", eccn: "3A090", reason: "AI training accelerator exceeding TPP threshold" },
-  { product: "Google TPU v4", eccn: "3A090", reason: "Custom AI accelerator, high TPP" },
-  { product: "General Purpose CPU (Server)", eccn: "4A994", reason: "EAR99 equivalent for standard computing" },
-  { product: "Encryption IC (AES-256)", eccn: "5A002", reason: "Implements controlled cryptographic functionality" },
-  { product: "FPGA (Xilinx Alveo U280)", eccn: "3A001.a.7", reason: "Programmable logic exceeding gate count threshold" },
-  { product: "Oscilloscope >4GHz", eccn: "3A002.a.5", reason: "Test equipment exceeding bandwidth threshold" },
-  { product: "Thermal Imaging Camera", eccn: "6A003", reason: "Infrared focal plane array sensor" },
+  { product: "NVIDIA A100 (80GB)", eccn: "3A090", spec: "TPP ~624 TOPS INT8" },
+  { product: "NVIDIA H100 (SXM)", eccn: "3A090", spec: "TPP ~3958 TOPS INT8" },
+  { product: "NVIDIA H800", eccn: "3A090.a", spec: "Reduced NVLink BW" },
+  { product: "NVIDIA RTX 4090", eccn: "3A090.a", spec: "TPP ~1321 TOPS" },
+  { product: "AMD MI300X", eccn: "3A090", spec: "TPP >>4800 TOPS" },
+  { product: "Intel Gaudi2", eccn: "3A090", spec: "AI training accelerator" },
+  { product: "General Server CPU", eccn: "4A994", spec: "Below threshold" },
+  { product: "AES-256 Encryption IC", eccn: "5A002", spec: "256-bit symmetric" },
+  { product: "Xilinx Alveo U280", eccn: "3A001", spec: "FPGA >700K gates" },
+  { product: "Oscilloscope >4GHz", eccn: "3A002", spec: "BW >4GHz" },
+  { product: "FLIR Thermal Camera", eccn: "6A003", spec: "IR FPA sensor" },
 ];
 
-function Spinner() {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-      <span style={{
-        width: 18, height: 18, border: "2.5px solid rgba(180,140,255,0.25)",
-        borderTop: "2.5px solid #a78bfa", borderRadius: "50%",
-        animation: "spin 0.7s linear infinite", display: "inline-block",
-      }} />
-      <span style={{ color: "#c4b5fd", fontSize: 13, fontStyle: "italic" }}>AI 분석 중...</span>
-    </span>
-  );
+// ═══════════════════════════════════════════════════════════
+// ENGINE
+// ═══════════════════════════════════════════════════════════
+
+function findCandidates(product, model) {
+  const q = (product + " " + model).toLowerCase();
+  const scored = [];
+  for (const [eccn, e] of Object.entries(ECCN_DB)) {
+    if (eccn === "EAR99") continue;
+    let score = 0;
+    for (const kw of e.keywords) { if (q.includes(kw)) score += kw.length; }
+    if (score > 0) {
+      scored.push({ eccn, ...e, score, likelihood: score > 20 ? "high" : score > 8 ? "medium" : "low" });
+    }
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const r = scored.slice(0, 7);
+  r.push({ eccn: "EAR99", ...ECCN_DB["EAR99"], score: 0, likelihood: "low" });
+  return r;
 }
 
-function StepIndicator({ current }) {
-  return (
-    <div style={{ display: "flex", gap: 0, alignItems: "center", marginBottom: 28, flexWrap: "wrap" }}>
-      {STEP_LABELS.map((label, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 56 }}>
-            <div style={{
-              width: 30, height: 30, borderRadius: "50%", display: "flex",
-              alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700,
-              background: i < current ? "linear-gradient(135deg,#7c3aed,#a78bfa)"
-                : i === current ? "linear-gradient(135deg,#f59e0b,#fbbf24)"
-                : "rgba(255,255,255,0.06)",
-              color: i <= current ? "#fff" : "#666",
-              border: i === current ? "2px solid #fbbf24" : "2px solid transparent",
-              transition: "all 0.3s",
-              boxShadow: i === current ? "0 0 12px rgba(251,191,36,0.4)" : "none",
-            }}>
-              {i < current ? "✓" : i + 1}
-            </div>
-            <span style={{
-              fontSize: 10, marginTop: 4, color: i <= current ? "#e2d6ff" : "#555",
-              fontWeight: i === current ? 700 : 400, whiteSpace: "nowrap",
-            }}>
-              {label}
-            </span>
-          </div>
-          {i < STEP_LABELS.length - 1 && (
-            <div style={{
-              width: 28, height: 2, margin: "0 2px",
-              background: i < current ? "#7c3aed" : "rgba(255,255,255,0.08)",
-              marginBottom: 16, borderRadius: 1,
-            }} />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CaseTable({ cases, highlight }) {
-  const filtered = highlight
-    ? cases.filter(c => c.eccn.startsWith(highlight) || c.product.toLowerCase().includes(highlight.toLowerCase()))
-    : cases;
-  if (!filtered.length) return null;
-  return (
-    <div style={{ marginTop: 16 }}>
-      <div style={{ fontSize: 12, color: "#a78bfa", marginBottom: 8, fontWeight: 600, letterSpacing: 0.5 }}>
-        📋 참고 사례 {highlight && `(${highlight} 관련)`}
-      </div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid rgba(167,139,250,0.2)" }}>
-              {["품목", "ECCN", "사유"].map(h => (
-                <th key={h} style={{ padding: "6px 10px", textAlign: "left", color: "#c4b5fd", fontWeight: 600, fontSize: 11 }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((c, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                <td style={{ padding: "5px 10px", color: "#e8e0ff" }}>{c.product}</td>
-                <td style={{ padding: "5px 10px" }}>
-                  <span style={{
-                    background: "rgba(124,58,237,0.25)", padding: "2px 8px",
-                    borderRadius: 4, color: "#d8b4fe", fontFamily: "'JetBrains Mono',monospace", fontSize: 11,
-                  }}>{c.eccn}</span>
-                </td>
-                <td style={{ padding: "5px 10px", color: "#999", fontSize: 11 }}>{c.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-async function callClaude(systemPrompt, userMessage) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-    }),
-  });
-  const data = await res.json();
-  return data.content
-    ?.filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("\n") || "";
-}
-
-async function callClaudeJSON(systemPrompt, userMessage) {
-  const raw = await callClaude(systemPrompt, userMessage);
-  const match = raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-  if (match) {
-    try { return JSON.parse(match[0]); } catch { return null; }
+function evalParam(p, val) {
+  const v = parseFloat(val);
+  if (isNaN(v)) return null;
+  switch (p.op) {
+    case ">": return v > p.threshold;
+    case ">=": return v >= p.threshold;
+    case "<": return v < p.threshold;
+    case "<=": return v <= p.threshold;
+    case "=": return v == p.threshold;
   }
   return null;
 }
 
-function App() {
-  const [step, setStep] = useState(0);
-  const [product, setProduct] = useState("");
-  const [model, setModel] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [candidates, setCandidates] = useState(null);
-  const [parameters, setParameters] = useState(null);
-  const [paramValues, setParamValues] = useState({});
-  const [autoFilled, setAutoFilled] = useState({});
-  const [finalResult, setFinalResult] = useState(null);
-  const [error, setError] = useState("");
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTo({ top: containerRef.current.scrollHeight, behavior: "smooth" });
-    }
-  }, [step, loading]);
-
-  const reset = () => {
-    setStep(0); setProduct(""); setModel(""); setCandidates(null);
-    setParameters(null); setParamValues({}); setAutoFilled({});
-    setFinalResult(null); setError(""); setLoading(false);
-  };
-
-  const findCandidates = async () => {
-    if (!product.trim()) return;
-    setLoading(true); setError("");
-    try {
-      const sys = `You are an expert in U.S. Export Administration Regulations (EAR) and ECCN classification.
-Given a product description/name, identify ALL possible ECCN candidates that could apply.
-For each candidate, explain briefly why it might apply.
-Return ONLY valid JSON (no markdown fences):
-{
-  "product_summary": "brief description",
-  "candidates": [
-    {"eccn": "3A090", "title": "short title", "reason": "why this might apply", "likelihood": "high|medium|low"}
-  ]
-}
-Include at minimum 3 candidates, up to 8. Always include EAR99 as a fallback candidate.
-Consider Commerce Control List Categories 0-9. Think broadly about all applicable entries.`;
-      const msg = `품목: ${product}${model ? `\n모델명: ${model}` : ""}`;
-      const result = await callClaudeJSON(sys, msg);
-      if (result?.candidates) {
-        setCandidates(result);
-        setStep(1);
-      } else {
-        setError("ECCN 후보군 분석에 실패했습니다. 다시 시도해주세요.");
-      }
-    } catch (e) {
-      setError("API 호출 오류: " + e.message);
-    }
-    setLoading(false);
-  };
-
-  const extractParams = async () => {
-    setLoading(true); setError("");
-    try {
-      const ecnList = candidates.candidates.map(c => c.eccn).join(", ");
-      const sys = `You are an expert in U.S. EAR ECCN classification parameters.
-Given ECCN candidates, extract the key technical parameters needed to determine classification.
-Return ONLY valid JSON:
-{
-  "parameters": [
-    {
-      "eccn": "3A090",
-      "params": [
-        {"name": "Total Processing Performance (TPP)", "key": "tpp", "unit": "TOPS", "threshold": ">4800", "description": "Aggregated theoretical processing performance"},
-        {"name": "Performance Density (PD)", "key": "pd", "unit": "TOPS/mm²", "threshold": ">5.92", "description": "TPP divided by die area"}
-      ]
-    }
-  ]
-}
-Be precise with thresholds from the actual EAR regulations. Include all relevant parameters for classification decision.`;
-      const msg = `품목: ${product}${model ? `\n모델명: ${model}` : ""}\nECCN 후보군: ${ecnList}`;
-      const result = await callClaudeJSON(sys, msg);
-      if (result?.parameters) {
-        setParameters(result.parameters);
-        setStep(2);
-        if (model.trim()) {
-          await searchParamValues(result.parameters);
-        }
-      } else {
-        setError("파라미터 추출에 실패했습니다.");
-      }
-    } catch (e) {
-      setError("API 호출 오류: " + e.message);
-    }
-    setLoading(false);
-  };
-
-  const searchParamValues = async (params) => {
-    setLoading(true);
-    try {
-      const allParams = params.flatMap(p => p.params.map(pp => ({ ...pp, eccn: p.eccn })));
-      const paramList = allParams.map(p => `- ${p.name} (${p.key}, unit: ${p.unit})`).join("\n");
-      const sys = `You are a technical specifications researcher.
-Search the web for the product's technical specifications and compute the requested parameters.
-For GPU/AI accelerators: TPP = theoretical TOPS (INT8 or equivalent), PD = TPP / die_area_mm2.
-Return ONLY valid JSON:
-{
-  "values": {
-    "parameter_key": {"value": 123.45, "source": "where you found it", "confident": true},
-    ...
-  },
-  "notes": "any important notes"
-}
-If you cannot find a value with confidence, set "confident": false and "value": null.`;
-      const msg = `제품: ${product}\n모델명: ${model}\n\n필요한 파라미터:\n${paramList}`;
-      const result = await callClaudeJSON(sys, msg);
-      if (result?.values) {
-        const newVals = {};
-        const newAuto = {};
-        for (const [key, info] of Object.entries(result.values)) {
-          if (info.confident && info.value != null) {
-            newVals[key] = String(info.value);
-            newAuto[key] = info.source || "web search";
-          }
-        }
-        setParamValues(prev => ({ ...prev, ...newVals }));
-        setAutoFilled(newAuto);
-      }
-    } catch (e) {
-      console.error("Auto-search failed:", e);
-    }
-    setStep(3);
-    setLoading(false);
-  };
-
-  const classify = async () => {
-    setLoading(true); setError("");
-    try {
-      const paramSummary = parameters.flatMap(p =>
-        p.params.map(pp => `${pp.eccn} - ${pp.name}(${pp.key}): ${paramValues[pp.key] || "N/A"} ${pp.unit} (threshold: ${pp.threshold})`)
-      ).join("\n");
-      const caseRef = KNOWN_CASES.map(c => `${c.product}: ${c.eccn} (${c.reason})`).join("\n");
-
-      const sys = `You are a senior U.S. export control classification specialist.
-Based on the product information, ECCN candidates, technical parameters, and reference cases, determine the final ECCN classification.
-Provide a detailed analysis. Return ONLY valid JSON:
-{
-  "final_eccn": "3A090",
-  "confidence": "high|medium|low",
-  "classification_basis": "Detailed explanation of why this ECCN was selected",
-  "parameter_analysis": "How each parameter compares to thresholds",
-  "alternative_eccns": [{"eccn": "4A090", "reason": "why this was not selected"}],
-  "export_control_notes": "Key restrictions, license requirements, or de minimis considerations",
-  "recommendation": "Practical recommendation for the exporter"
-}`;
-      const msg = `품목: ${product}${model ? `\n모델명: ${model}` : ""}
-
-ECCN 후보군:
-${candidates.candidates.map(c => `${c.eccn}: ${c.reason}`).join("\n")}
-
-기술 파라미터 측정값:
-${paramSummary}
-
-기존 Classification 사례:
-${caseRef}`;
-
-      const result = await callClaudeJSON(sys, msg);
-      if (result?.final_eccn) {
-        setFinalResult(result);
-        setStep(4);
-      } else {
-        setError("최종 분류에 실패했습니다.");
-      }
-    } catch (e) {
-      setError("API 호출 오류: " + e.message);
-    }
-    setLoading(false);
-  };
-
-  const allParamsHaveValues = parameters
-    ? parameters.every(p => p.params.every(pp => paramValues[pp.key]?.trim()))
-    : false;
-
-  return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px" }} ref={containerRef}>
-      {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <div style={{
-          display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 8,
-          background: "rgba(124,58,237,0.1)", padding: "8px 20px", borderRadius: 40,
-          border: "1px solid rgba(124,58,237,0.2)",
-        }}>
-          <span style={{ fontSize: 22 }}>🔬</span>
-          <span style={{
-            fontSize: 20, fontWeight: 700, letterSpacing: -0.5,
-            background: "linear-gradient(135deg,#c4b5fd,#a78bfa,#7c3aed)",
-            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          }}>ECCN AI Classifier</span>
-        </div>
-        <p style={{ color: "#777", fontSize: 12, margin: 0, marginTop: 4 }}>
-          AI 기반 수출통제 품목분류 (EAR) · 후보 선정 → 파라미터 분석 → 자동 Classification
-        </p>
-      </div>
-
-      <StepIndicator current={step} />
-
-      {/* Step 0: Product Input */}
-      {step === 0 && (
-        <div className="card" style={{
-          background: "rgba(255,255,255,0.03)", borderRadius: 14,
-          border: "1px solid rgba(167,139,250,0.12)", padding: 24,
-        }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: "#d8b4fe" }}>
-            🎯 분류 대상 품목 입력
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 12, color: "#999", display: "block", marginBottom: 5 }}>
-              품목 설명 <span style={{ color: "#ef4444" }}>*</span>
-            </label>
-            <input
-              className="input-field"
-              placeholder="예: GPU, AI accelerator, FPGA, 암호화 칩, 열화상 카메라..."
-              value={product}
-              onChange={(e) => setProduct(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && findCandidates()}
-            />
-          </div>
-          <div style={{ marginBottom: 18 }}>
-            <label style={{ fontSize: 12, color: "#999", display: "block", marginBottom: 5 }}>
-              모델명 (선택 — 입력 시 스펙 자동 검색)
-            </label>
-            <input
-              className="input-field"
-              placeholder="예: NVIDIA H100, AMD MI300X, Xilinx Alveo U280..."
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && findCandidates()}
-            />
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button className="btn-primary" onClick={findCandidates} disabled={!product.trim() || loading}>
-              {loading ? <Spinner /> : "ECCN 후보군 분석 →"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 1: Candidates */}
-      {step >= 1 && candidates && (
-        <div className="card" style={{
-          background: "rgba(255,255,255,0.03)", borderRadius: 14,
-          border: "1px solid rgba(167,139,250,0.12)", padding: 24, marginBottom: 16,
-        }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: "#d8b4fe" }}>
-            📋 ECCN 후보군 ({candidates.candidates.length}건)
-          </div>
-          <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>
-            {candidates.product_summary}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {candidates.candidates.map((c, i) => (
-              <div key={i} style={{
-                display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 14px",
-                background: "rgba(255,255,255,0.02)", borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.05)",
-              }}>
-                <span style={{
-                  fontFamily: "'JetBrains Mono',monospace", fontWeight: 600, fontSize: 14,
-                  color: "#a78bfa", minWidth: 72,
-                }}>{c.eccn}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{c.title}</div>
-                  <div style={{ fontSize: 11, color: "#888" }}>{c.reason}</div>
-                </div>
-                <span className={`badge badge-${c.likelihood}`}>{c.likelihood}</span>
-              </div>
-            ))}
-          </div>
-          {step === 1 && (
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-              <button className="btn-secondary" onClick={reset}>처음부터</button>
-              <button className="btn-primary" onClick={extractParams} disabled={loading}>
-                {loading ? <Spinner /> : "파라미터 추출 →"}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Step 2-3: Parameters */}
-      {step >= 2 && parameters && (
-        <div className="card" style={{
-          background: "rgba(255,255,255,0.03)", borderRadius: 14,
-          border: "1px solid rgba(167,139,250,0.12)", padding: 24, marginBottom: 16,
-        }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: "#d8b4fe" }}>
-            ⚙️ 기술 파라미터 {step >= 3 ? "값 확인" : "추출 완료"}
-          </div>
-          {parameters.map((ecGroup, gi) => (
-            <div key={gi} style={{ marginBottom: 16 }}>
-              <div style={{
-                fontSize: 13, fontWeight: 600, color: "#fbbf24", marginBottom: 8,
-                display: "flex", alignItems: "center", gap: 6,
-              }}>
-                <span style={{
-                  fontFamily: "'JetBrains Mono',monospace", background: "rgba(251,191,36,0.12)",
-                  padding: "2px 8px", borderRadius: 4,
-                }}>{ecGroup.eccn}</span>
-                판정 파라미터
-              </div>
-              {ecGroup.params.map((p, pi) => (
-                <div key={pi} style={{
-                  display: "flex", alignItems: "center", gap: 10, marginBottom: 8,
-                  padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8,
-                  flexWrap: "wrap",
-                }}>
-                  <div style={{ flex: "1 1 180px", minWidth: 150 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>{p.name}</div>
-                    <div style={{ fontSize: 10, color: "#777" }}>
-                      Threshold: {p.threshold} {p.unit}
-                    </div>
-                  </div>
-                  {step >= 3 ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}>
-                      <input
-                        className="input-field"
-                        style={{ width: 110, textAlign: "right", padding: "6px 10px", fontSize: 13 }}
-                        placeholder="값 입력"
-                        value={paramValues[p.key] || ""}
-                        onChange={(e) => setParamValues(prev => ({ ...prev, [p.key]: e.target.value }))}
-                      />
-                      <span style={{ fontSize: 11, color: "#888", minWidth: 40 }}>{p.unit}</span>
-                      {autoFilled[p.key] && (
-                        <span style={{
-                          fontSize: 9, color: "#4ade80", background: "rgba(74,222,128,0.1)",
-                          padding: "2px 6px", borderRadius: 4, whiteSpace: "nowrap",
-                        }}>auto</span>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 11, color: "#666" }}>{p.description}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-          {step === 2 && !loading && (
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-              <button className="btn-secondary" onClick={reset}>처음부터</button>
-              <button className="btn-primary" onClick={() => {
-                if (model.trim()) {
-                  searchParamValues(parameters);
-                } else {
-                  setStep(3);
-                }
-              }} disabled={loading}>
-                {loading ? <Spinner /> : model.trim() ? "웹 검색으로 값 조회 →" : "직접 값 입력 →"}
-              </button>
-            </div>
-          )}
-          {step === 3 && !loading && (
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-              <button className="btn-secondary" onClick={reset}>처음부터</button>
-              <button className="btn-primary" onClick={classify} disabled={!allParamsHaveValues || loading}>
-                {loading ? <Spinner /> : "최종 Classification 실행 →"}
-              </button>
-            </div>
-          )}
-          {loading && step < 4 && (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}><Spinner /></div>
-          )}
-        </div>
-      )}
-
-      {/* Step 4: Final Result */}
-      {step >= 4 && finalResult && (
-        <div className="card" style={{
-          background: "linear-gradient(135deg,rgba(124,58,237,0.08),rgba(99,102,241,0.06))",
-          borderRadius: 14, border: "1px solid rgba(167,139,250,0.25)", padding: 24,
-          marginBottom: 16, animation: "glow 3s ease-in-out infinite",
-        }}>
-          <div style={{ textAlign: "center", marginBottom: 20 }}>
-            <div style={{ fontSize: 13, color: "#a78bfa", marginBottom: 6, fontWeight: 600, letterSpacing: 1 }}>
-              CLASSIFICATION RESULT
-            </div>
-            <div style={{
-              fontSize: 36, fontWeight: 800, fontFamily: "'JetBrains Mono',monospace",
-              background: "linear-gradient(135deg,#fbbf24,#f59e0b,#d97706)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-              letterSpacing: 1,
-            }}>
-              {finalResult.final_eccn}
-            </div>
-            <span className={`badge badge-${finalResult.confidence}`} style={{ marginTop: 6, fontSize: 12 }}>
-              신뢰도: {finalResult.confidence}
-            </span>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {[
-              { label: "📌 분류 근거", text: finalResult.classification_basis },
-              { label: "📊 파라미터 분석", text: finalResult.parameter_analysis },
-              { label: "🚨 수출통제 참고", text: finalResult.export_control_notes },
-              { label: "💡 권고사항", text: finalResult.recommendation },
-            ].map((section, i) => (
-              <div key={i} style={{
-                padding: "12px 14px", background: "rgba(0,0,0,0.2)", borderRadius: 10,
-              }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#c4b5fd", marginBottom: 4 }}>
-                  {section.label}
-                </div>
-                <div style={{ fontSize: 13, color: "#ccc", lineHeight: 1.6 }}>{section.text}</div>
-              </div>
-            ))}
-
-            {finalResult.alternative_eccns?.length > 0 && (
-              <div style={{ padding: "12px 14px", background: "rgba(0,0,0,0.2)", borderRadius: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#c4b5fd", marginBottom: 8 }}>
-                  🔄 대안 ECCN
-                </div>
-                {finalResult.alternative_eccns.map((alt, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, fontSize: 12 }}>
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: "#888" }}>{alt.eccn}</span>
-                    <span style={{ color: "#777" }}>— {alt.reason}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <CaseTable cases={KNOWN_CASES} highlight={finalResult.final_eccn?.split(".")[0]} />
-
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 20 }}>
-            <button className="btn-primary" onClick={reset} style={{ padding: "10px 32px" }}>
-              🔄 새로운 품목 분류하기
-            </button>
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <div style={{
-          background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
-          borderRadius: 10, padding: "12px 16px", marginTop: 12, fontSize: 13, color: "#fca5a5",
-        }}>
-          ⚠️ {error}
-        </div>
-      )}
-
-      <div style={{
-        textAlign: "center", marginTop: 32, padding: "16px 0",
-        borderTop: "1px solid rgba(255,255,255,0.05)", fontSize: 10, color: "#555", lineHeight: 1.6,
-      }}>
-        ⚠️ 본 도구는 AI 기반 참고용이며, 최종 ECCN 분류는 반드시 전문가 검토 및 BIS 공식 자료를 통해 확인하세요.
-        <br />ECCN AI Classifier · Built with Claude API + Web Search
-      </div>
-    </div>
-  );
+function classifyAll(cands, vals) {
+  const results = [];
+  for (const c of cands) {
+    if (c.eccn === "EAR99") continue;
+    const entry = ECCN_DB[c.eccn];
+    if (!entry?.params?.length) continue;
+    const pr = entry.params.map(p => {
+      const val = vals[c.eccn + "_" + p.key];
+      return { ...p, value: val, passed: evalParam(p, val) };
+    });
+    const nums = {};
+    pr.forEach(p => { nums[p.key] = parseFloat(p.value) || 0; });
+    const allFilled = pr.every(p => p.value !== undefined && p.value !== "");
+    results.push({ eccn: c.eccn, entry, pr, matches: allFilled ? entry.logic(nums) : false, allFilled });
+  }
+  results.sort((a, b) => (b.matches ? 1 : 0) - (a.matches ? 1 : 0));
+  return results;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+// ═══════════════════════════════════════════════════════════
+// STATE + RENDER
+// ═══════════════════════════════════════════════════════════
+
+const S = { step: 0, product: "", model: "", cands: null, vals: {}, results: null };
+
+function esc(s) { return s == null ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+function render() {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+
+  // Header
+  app.insertAdjacentHTML("beforeend", `
+    <div class="header">
+      <div class="header-badge"><span style="font-size:22px">🔬</span><span class="header-title">ECCN Classifier</span></div>
+      <p class="header-sub">Rule-Based 수출통제 품목분류 (EAR) · ${Object.keys(ECCN_DB).length} ECCNs 내장 · No API Required</p>
+    </div>`);
+
+  // Steps
+  const labels = ["품목 입력","ECCN 후보군","파라미터 입력","최종 결과"];
+  let sh = '<div class="steps">';
+  labels.forEach((l, i) => {
+    const c = i < S.step ? "done" : i === S.step ? "active" : "pending";
+    sh += `<div class="step-item"><div class="step-node"><div class="step-circle ${c}">${i < S.step ? "✓" : i+1}</div><span class="step-label ${c}">${l}</span></div></div>`;
+    if (i < labels.length-1) sh += `<div class="step-line ${i < S.step ? "done" : "pending"}"></div>`;
+  });
+  sh += "</div>";
+  app.insertAdjacentHTML("beforeend", sh);
+
+  // Step 0
+  if (S.step === 0) {
+    app.insertAdjacentHTML("beforeend", `
+      <div class="card">
+        <div class="card-title">🎯 분류 대상 품목 입력</div>
+        <div class="field"><label class="field-label">품목 설명 <span class="req">*</span></label>
+          <input class="inp" id="ip" placeholder="예: GPU, AI accelerator, FPGA, 암호화 칩, 열화상 카메라, CNC..." value="${esc(S.product)}" /></div>
+        <div class="field"><label class="field-label">모델명 (선택)</label>
+          <input class="inp" id="im" placeholder="예: NVIDIA H100, AMD MI300X..." value="${esc(S.model)}" /></div>
+        <div style="margin-top:8px;padding:10px 14px;background:rgba(139,92,246,.06);border-radius:10px;border:1px solid rgba(139,92,246,.1);">
+          <div style="font-size:11px;color:var(--accent3);font-weight:600;margin-bottom:6px;">💡 지원 카테고리</div>
+          <div style="font-size:11px;color:var(--text3);line-height:1.7;">Cat 1: 화학물질 · Cat 2: 공작기계 · Cat 3: 전자부품/GPU/FPGA/측정기 · Cat 4: 컴퓨터/서버 · Cat 5: 암호화/통신 · Cat 6: 센서/카메라/레이저 · Cat 7: 관성항법 · Cat 9: 추진체</div>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" id="bf">ECCN 후보군 분석 →</button></div>
+      </div>`);
+    setTimeout(() => {
+      const ip = document.getElementById("ip"), im = document.getElementById("im");
+      ip.addEventListener("input", e => S.product = e.target.value);
+      im.addEventListener("input", e => S.model = e.target.value);
+      const go = () => { if (!S.product.trim()) return; S.cands = findCandidates(S.product, S.model); S.step = 1; render(); };
+      document.getElementById("bf").addEventListener("click", go);
+      ip.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+      im.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+      ip.focus();
+    }, 10);
+  }
+
+  // Step 1: Candidates
+  if (S.step >= 1 && S.cands) {
+    let h = `<div class="card"><div class="card-title">📋 ECCN 후보군 (${S.cands.length}건)</div>`;
+    S.cands.forEach(c => {
+      h += `<div class="cand"><span class="cand-eccn">${c.eccn}</span><div class="cand-body"><div class="cand-title">${esc(c.title)}</div><div class="cand-reason">${esc(c.notes||"")}</div></div><span class="badge badge-${c.likelihood}">${c.likelihood}</span></div>`;
+    });
+    if (S.step === 1) h += `<div class="btn-row"><button class="btn btn-ghost" id="r1">처음부터</button><button class="btn btn-primary" id="bp">파라미터 입력 →</button></div>`;
+    h += "</div>";
+    app.insertAdjacentHTML("beforeend", h);
+    if (S.step === 1) setTimeout(() => {
+      document.getElementById("r1")?.addEventListener("click", reset);
+      document.getElementById("bp")?.addEventListener("click", () => { S.step = 2; render(); });
+    }, 10);
+  }
+
+  // Step 2: Params
+  if (S.step >= 2 && S.cands) {
+    const rel = S.cands.filter(c => c.eccn !== "EAR99" && ECCN_DB[c.eccn]?.params?.length);
+    let h = `<div class="card"><div class="card-title">⚙️ 기술 파라미터 입력</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px;">각 ECCN 판정 기준 파라미터 값을 입력하세요. 동일 파라미터는 자동 공유됩니다.</div>`;
+    const seen = new Set();
+    rel.forEach(c => {
+      const e = ECCN_DB[c.eccn];
+      if (!e.params.some(p => !seen.has(p.key))) return;
+      h += `<div class="eccn-group"><div class="eccn-group-header"><span class="eccn-tag">${c.eccn}</span> 판정 파라미터</div>`;
+      e.params.forEach(p => {
+        if (seen.has(p.key)) return;
+        seen.add(p.key);
+        const fk = c.eccn + "_" + p.key;
+        const v = S.vals[fk] || "";
+        h += `<div class="param-row"><div class="param-info"><div class="param-name">${esc(p.name)}</div><div class="param-thresh">Threshold: ${p.op} ${p.threshold} ${esc(p.unit)}</div></div>
+          <div class="param-input"><input class="inp pv" data-fk="${fk}" data-pk="${p.key}" placeholder="${p.unit.includes('yes') ? '1=yes, 0=no' : '값 입력'}" value="${esc(v)}" style="width:120px;text-align:right;padding:6px 10px;font-size:13px;font-family:var(--mono);" /><span class="param-unit">${esc(p.unit)}</span></div></div>`;
+      });
+      h += "</div>";
+    });
+    if (S.step === 2) h += `<div class="btn-row"><button class="btn btn-ghost" id="r2">처음부터</button><button class="btn btn-primary" id="bc">최종 Classification →</button></div>`;
+    h += "</div>";
+    app.insertAdjacentHTML("beforeend", h);
+    if (S.step === 2) setTimeout(() => {
+      document.querySelectorAll(".pv").forEach(inp => {
+        inp.addEventListener("input", e => {
+          const fk = e.target.dataset.fk, pk = e.target.dataset.pk;
+          S.vals[fk] = e.target.value;
+          S.cands.forEach(c => {
+            if (c.eccn === "EAR99") return;
+            if (ECCN_DB[c.eccn]?.params?.some(p => p.key === pk)) S.vals[c.eccn + "_" + pk] = e.target.value;
+          });
+        });
+      });
+      document.getElementById("r2")?.addEventListener("click", reset);
+      document.getElementById("bc")?.addEventListener("click", () => {
+        S.results = classifyAll(S.cands, S.vals);
+        S.step = 3;
+        render();
+        setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 50);
+      });
+    }, 10);
+  }
+
+  // Step 3: Result
+  if (S.step >= 3 && S.results) {
+    const matched = S.results.filter(r => r.matches);
+    const best = matched[0] || null;
+    const eccn = best ? best.eccn : "EAR99";
+    const entry = ECCN_DB[eccn];
+    const conf = best ? (matched.length === 1 ? "high" : "medium") : "low";
+
+    let h = `<div class="result-card"><div style="text-align:center;margin-bottom:22px;">
+      <div style="font-size:13px;color:var(--accent2);font-weight:600;letter-spacing:1px;margin-bottom:6px;">CLASSIFICATION RESULT</div>
+      <div class="result-eccn">${eccn}</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px;">${esc(entry.title)}</div>
+      <span class="badge badge-${conf}" style="margin-top:8px;font-size:12px;">신뢰도: ${conf}</span></div>`;
+
+    // Param analysis
+    if (best) {
+      h += `<div class="result-section"><div class="result-section-title">📊 파라미터 분석</div><div style="margin-top:8px;">`;
+      best.pr.forEach(p => {
+        const st = p.passed === true ? "pass" : p.passed === false ? "fail" : "na";
+        const lb = p.passed === true ? "MEET" : p.passed === false ? "NOT MET" : "N/A";
+        h += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px;">
+          <span class="param-status param-${st}">${lb}</span>
+          <span style="color:var(--text)">${esc(p.name)}: </span>
+          <span style="font-family:var(--mono);color:var(--gold2);">${esc(p.value||'N/A')}</span>
+          <span style="color:var(--text3);">(${p.op} ${p.threshold} ${esc(p.unit)})</span></div>`;
+      });
+      h += "</div></div>";
+    }
+
+    h += `<div class="result-section"><div class="result-section-title">📌 분류 근거</div>
+      <div class="result-section-text">${best ? `입력된 기술 파라미터가 <strong>${eccn}</strong>의 판정 기준을 충족합니다. ${esc(entry.notes)}` : `입력된 파라미터가 CCL 항목 기준을 충족하지 않습니다. <strong>EAR99</strong> (비통제)로 분류됩니다. ${esc(entry.notes)}`}</div></div>`;
+
+    h += `<div class="result-section"><div class="result-section-title">🚨 수출통제 참고</div>
+      <div class="result-section-text">${esc(entry.restrictions)}</div></div>`;
+
+    // Alternatives
+    const alts = [...matched.slice(1), ...S.results.filter(r => !r.matches).slice(0, 4)];
+    if (alts.length) {
+      h += `<div class="result-section"><div class="result-section-title">🔄 검토된 대안 ECCN</div>`;
+      alts.forEach(r => {
+        h += `<div style="display:flex;gap:8px;margin-bottom:4px;font-size:12px;">
+          <span style="font-family:var(--mono);color:var(--text3);min-width:70px;">${r.eccn}</span>
+          <span class="badge ${r.matches?'badge-medium':'badge-low'}" style="font-size:9px;">${r.matches?'MATCH':'NOT MET'}</span>
+          <span style="color:var(--text3);">— ${esc(r.entry.title)}</span></div>`;
+      });
+      h += "</div>";
+    }
+
+    // Cases
+    const cases = KNOWN_CASES.filter(c => S.cands.some(cd => c.eccn.startsWith(cd.eccn.split(".")[0]))).slice(0, 8);
+    if (cases.length) {
+      h += `<div style="margin-top:16px;"><div style="font-size:12px;color:var(--accent2);margin-bottom:8px;font-weight:600;">📋 참고 사례</div>
+        <table class="case-table"><thead><tr><th>품목</th><th>ECCN</th><th>Spec</th></tr></thead><tbody>`;
+      cases.forEach(c => {
+        h += `<tr><td style="color:var(--text)">${esc(c.product)}</td><td><span class="case-eccn">${c.eccn}</span></td><td style="color:var(--text3);font-size:11px;">${esc(c.spec)}</td></tr>`;
+      });
+      h += "</tbody></table></div>";
+    }
+
+    h += `<div class="btn-row" style="justify-content:center;margin-top:22px;"><button class="btn btn-primary" id="rr" style="padding:10px 32px;">🔄 새로운 품목 분류하기</button></div></div>`;
+    app.insertAdjacentHTML("beforeend", h);
+    setTimeout(() => { document.getElementById("rr")?.addEventListener("click", reset); }, 10);
+  }
+
+  app.insertAdjacentHTML("beforeend", `<div class="footer">⚠️ 본 도구는 참고용이며, 최종 ECCN 분류는 반드시 전문가 검토 및 BIS 공식 자료를 통해 확인하세요.<br>ECCN Rule-Based Classifier · ${Object.keys(ECCN_DB).length} ECCNs · Decision Tree Engine · No API</div>`);
+}
+
+function reset() {
+  S.step = 0; S.product = ""; S.model = ""; S.cands = null; S.vals = {}; S.results = null;
+  render(); window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+render();
 </script>
 </body>
 </html>
