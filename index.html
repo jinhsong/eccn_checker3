@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ECCN AI Classifier</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+KR:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    min-height:100vh; background:#0c0a14;
+    font-family:'Pretendard','Noto Sans KR','Inter',sans-serif;
+    color:#e8e0ff;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes glow { 0%,100% { box-shadow:0 0 20px rgba(124,58,237,0.3); } 50% { box-shadow:0 0 40px rgba(124,58,237,0.5); } }
+  .card { animation:fadeUp 0.4s ease-out; }
+  .btn-primary {
+    background:linear-gradient(135deg,#7c3aed,#6d28d9); color:#fff; border:none; padding:10px 22px;
+    border-radius:8px; font-weight:600; cursor:pointer; font-size:14px; transition:all 0.2s;
+    font-family:inherit;
+  }
+  .btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 16px rgba(124,58,237,0.4); }
+  .btn-primary:disabled { opacity:0.4; cursor:not-allowed; transform:none; box-shadow:none; }
+  .btn-secondary {
+    background:rgba(255,255,255,0.06); color:#c4b5fd; border:1px solid rgba(167,139,250,0.2);
+    padding:8px 18px; border-radius:8px; font-weight:500; cursor:pointer; font-size:13px;
+    transition:all 0.2s; font-family:inherit;
+  }
+  .btn-secondary:hover { background:rgba(255,255,255,0.1); border-color:rgba(167,139,250,0.4); }
+  .input-field {
+    width:100%; padding:10px 14px; background:rgba(255,255,255,0.05); border:1px solid rgba(167,139,250,0.15);
+    border-radius:8px; color:#e8e0ff; font-size:14px; outline:none; transition:border-color 0.2s;
+    font-family:inherit;
+  }
+  .input-field:focus { border-color:#7c3aed; }
+  .input-field::placeholder { color:#555; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600; }
+  .badge-high { background:rgba(239,68,68,0.15); color:#fca5a5; }
+  .badge-medium { background:rgba(251,191,36,0.15); color:#fde68a; }
+  .badge-low { background:rgba(74,222,128,0.15); color:#86efac; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const STEP_LABELS = [
+  "품목 입력",
+  "ECCN 후보군",
+  "파라미터 추출",
+  "파라미터 값 확인",
+  "최종 Classification",
+];
+
+const KNOWN_CASES = [
+  { product: "NVIDIA A100", eccn: "3A090", reason: "TPP > 4800 TOPS, PD > 600 W" },
+  { product: "NVIDIA H100", eccn: "3A090", reason: "TPP > 4800 TOPS, PD > 700 W" },
+  { product: "NVIDIA A800", eccn: "3A090.a", reason: "Export control compliant variant, reduced interconnect" },
+  { product: "NVIDIA H800", eccn: "3A090.a", reason: "China-specific variant with reduced NVLink bandwidth" },
+  { product: "NVIDIA L40", eccn: "4A090", reason: "TPP > 4800 TOPS but PD ≤ 600W threshold" },
+  { product: "NVIDIA RTX 4090", eccn: "3A090.a", reason: "Consumer GPU, TPP > 1600 TOPS, high performance density" },
+  { product: "AMD MI250X", eccn: "3A090", reason: "TPP exceeds threshold for HPC/AI accelerator" },
+  { product: "AMD MI300X", eccn: "3A090", reason: "TPP significantly exceeds 4800 threshold" },
+  { product: "Intel Gaudi2", eccn: "3A090", reason: "AI training accelerator exceeding TPP threshold" },
+  { product: "Google TPU v4", eccn: "3A090", reason: "Custom AI accelerator, high TPP" },
+  { product: "General Purpose CPU (Server)", eccn: "4A994", reason: "EAR99 equivalent for standard computing" },
+  { product: "Encryption IC (AES-256)", eccn: "5A002", reason: "Implements controlled cryptographic functionality" },
+  { product: "FPGA (Xilinx Alveo U280)", eccn: "3A001.a.7", reason: "Programmable logic exceeding gate count threshold" },
+  { product: "Oscilloscope >4GHz", eccn: "3A002.a.5", reason: "Test equipment exceeding bandwidth threshold" },
+  { product: "Thermal Imaging Camera", eccn: "6A003", reason: "Infrared focal plane array sensor" },
+];
+
+function Spinner() {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <span style={{
+        width: 18, height: 18, border: "2.5px solid rgba(180,140,255,0.25)",
+        borderTop: "2.5px solid #a78bfa", borderRadius: "50%",
+        animation: "spin 0.7s linear infinite", display: "inline-block",
+      }} />
+      <span style={{ color: "#c4b5fd", fontSize: 13, fontStyle: "italic" }}>AI 분석 중...</span>
+    </span>
+  );
+}
+
+function StepIndicator({ current }) {
+  return (
+    <div style={{ display: "flex", gap: 0, alignItems: "center", marginBottom: 28, flexWrap: "wrap" }}>
+      {STEP_LABELS.map((label, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 56 }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: "50%", display: "flex",
+              alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700,
+              background: i < current ? "linear-gradient(135deg,#7c3aed,#a78bfa)"
+                : i === current ? "linear-gradient(135deg,#f59e0b,#fbbf24)"
+                : "rgba(255,255,255,0.06)",
+              color: i <= current ? "#fff" : "#666",
+              border: i === current ? "2px solid #fbbf24" : "2px solid transparent",
+              transition: "all 0.3s",
+              boxShadow: i === current ? "0 0 12px rgba(251,191,36,0.4)" : "none",
+            }}>
+              {i < current ? "✓" : i + 1}
+            </div>
+            <span style={{
+              fontSize: 10, marginTop: 4, color: i <= current ? "#e2d6ff" : "#555",
+              fontWeight: i === current ? 700 : 400, whiteSpace: "nowrap",
+            }}>
+              {label}
+            </span>
+          </div>
+          {i < STEP_LABELS.length - 1 && (
+            <div style={{
+              width: 28, height: 2, margin: "0 2px",
+              background: i < current ? "#7c3aed" : "rgba(255,255,255,0.08)",
+              marginBottom: 16, borderRadius: 1,
+            }} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CaseTable({ cases, highlight }) {
+  const filtered = highlight
+    ? cases.filter(c => c.eccn.startsWith(highlight) || c.product.toLowerCase().includes(highlight.toLowerCase()))
+    : cases;
+  if (!filtered.length) return null;
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 12, color: "#a78bfa", marginBottom: 8, fontWeight: 600, letterSpacing: 0.5 }}>
+        📋 참고 사례 {highlight && `(${highlight} 관련)`}
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid rgba(167,139,250,0.2)" }}>
+              {["품목", "ECCN", "사유"].map(h => (
+                <th key={h} style={{ padding: "6px 10px", textAlign: "left", color: "#c4b5fd", fontWeight: 600, fontSize: 11 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((c, i) => (
+              <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <td style={{ padding: "5px 10px", color: "#e8e0ff" }}>{c.product}</td>
+                <td style={{ padding: "5px 10px" }}>
+                  <span style={{
+                    background: "rgba(124,58,237,0.25)", padding: "2px 8px",
+                    borderRadius: 4, color: "#d8b4fe", fontFamily: "'JetBrains Mono',monospace", fontSize: 11,
+                  }}>{c.eccn}</span>
+                </td>
+                <td style={{ padding: "5px 10px", color: "#999", fontSize: 11 }}>{c.reason}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+async function callClaude(systemPrompt, userMessage) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userMessage }],
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+    }),
+  });
+  const data = await res.json();
+  return data.content
+    ?.filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join("\n") || "";
+}
+
+async function callClaudeJSON(systemPrompt, userMessage) {
+  const raw = await callClaude(systemPrompt, userMessage);
+  const match = raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch { return null; }
+  }
+  return null;
+}
+
+function App() {
+  const [step, setStep] = useState(0);
+  const [product, setProduct] = useState("");
+  const [model, setModel] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [candidates, setCandidates] = useState(null);
+  const [parameters, setParameters] = useState(null);
+  const [paramValues, setParamValues] = useState({});
+  const [autoFilled, setAutoFilled] = useState({});
+  const [finalResult, setFinalResult] = useState(null);
+  const [error, setError] = useState("");
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ top: containerRef.current.scrollHeight, behavior: "smooth" });
+    }
+  }, [step, loading]);
+
+  const reset = () => {
+    setStep(0); setProduct(""); setModel(""); setCandidates(null);
+    setParameters(null); setParamValues({}); setAutoFilled({});
+    setFinalResult(null); setError(""); setLoading(false);
+  };
+
+  const findCandidates = async () => {
+    if (!product.trim()) return;
+    setLoading(true); setError("");
+    try {
+      const sys = `You are an expert in U.S. Export Administration Regulations (EAR) and ECCN classification.
+Given a product description/name, identify ALL possible ECCN candidates that could apply.
+For each candidate, explain briefly why it might apply.
+Return ONLY valid JSON (no markdown fences):
+{
+  "product_summary": "brief description",
+  "candidates": [
+    {"eccn": "3A090", "title": "short title", "reason": "why this might apply", "likelihood": "high|medium|low"}
+  ]
+}
+Include at minimum 3 candidates, up to 8. Always include EAR99 as a fallback candidate.
+Consider Commerce Control List Categories 0-9. Think broadly about all applicable entries.`;
+      const msg = `품목: ${product}${model ? `\n모델명: ${model}` : ""}`;
+      const result = await callClaudeJSON(sys, msg);
+      if (result?.candidates) {
+        setCandidates(result);
+        setStep(1);
+      } else {
+        setError("ECCN 후보군 분석에 실패했습니다. 다시 시도해주세요.");
+      }
+    } catch (e) {
+      setError("API 호출 오류: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  const extractParams = async () => {
+    setLoading(true); setError("");
+    try {
+      const ecnList = candidates.candidates.map(c => c.eccn).join(", ");
+      const sys = `You are an expert in U.S. EAR ECCN classification parameters.
+Given ECCN candidates, extract the key technical parameters needed to determine classification.
+Return ONLY valid JSON:
+{
+  "parameters": [
+    {
+      "eccn": "3A090",
+      "params": [
+        {"name": "Total Processing Performance (TPP)", "key": "tpp", "unit": "TOPS", "threshold": ">4800", "description": "Aggregated theoretical processing performance"},
+        {"name": "Performance Density (PD)", "key": "pd", "unit": "TOPS/mm²", "threshold": ">5.92", "description": "TPP divided by die area"}
+      ]
+    }
+  ]
+}
+Be precise with thresholds from the actual EAR regulations. Include all relevant parameters for classification decision.`;
+      const msg = `품목: ${product}${model ? `\n모델명: ${model}` : ""}\nECCN 후보군: ${ecnList}`;
+      const result = await callClaudeJSON(sys, msg);
+      if (result?.parameters) {
+        setParameters(result.parameters);
+        setStep(2);
+        if (model.trim()) {
+          await searchParamValues(result.parameters);
+        }
+      } else {
+        setError("파라미터 추출에 실패했습니다.");
+      }
+    } catch (e) {
+      setError("API 호출 오류: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  const searchParamValues = async (params) => {
+    setLoading(true);
+    try {
+      const allParams = params.flatMap(p => p.params.map(pp => ({ ...pp, eccn: p.eccn })));
+      const paramList = allParams.map(p => `- ${p.name} (${p.key}, unit: ${p.unit})`).join("\n");
+      const sys = `You are a technical specifications researcher.
+Search the web for the product's technical specifications and compute the requested parameters.
+For GPU/AI accelerators: TPP = theoretical TOPS (INT8 or equivalent), PD = TPP / die_area_mm2.
+Return ONLY valid JSON:
+{
+  "values": {
+    "parameter_key": {"value": 123.45, "source": "where you found it", "confident": true},
+    ...
+  },
+  "notes": "any important notes"
+}
+If you cannot find a value with confidence, set "confident": false and "value": null.`;
+      const msg = `제품: ${product}\n모델명: ${model}\n\n필요한 파라미터:\n${paramList}`;
+      const result = await callClaudeJSON(sys, msg);
+      if (result?.values) {
+        const newVals = {};
+        const newAuto = {};
+        for (const [key, info] of Object.entries(result.values)) {
+          if (info.confident && info.value != null) {
+            newVals[key] = String(info.value);
+            newAuto[key] = info.source || "web search";
+          }
+        }
+        setParamValues(prev => ({ ...prev, ...newVals }));
+        setAutoFilled(newAuto);
+      }
+    } catch (e) {
+      console.error("Auto-search failed:", e);
+    }
+    setStep(3);
+    setLoading(false);
+  };
+
+  const classify = async () => {
+    setLoading(true); setError("");
+    try {
+      const paramSummary = parameters.flatMap(p =>
+        p.params.map(pp => `${pp.eccn} - ${pp.name}(${pp.key}): ${paramValues[pp.key] || "N/A"} ${pp.unit} (threshold: ${pp.threshold})`)
+      ).join("\n");
+      const caseRef = KNOWN_CASES.map(c => `${c.product}: ${c.eccn} (${c.reason})`).join("\n");
+
+      const sys = `You are a senior U.S. export control classification specialist.
+Based on the product information, ECCN candidates, technical parameters, and reference cases, determine the final ECCN classification.
+Provide a detailed analysis. Return ONLY valid JSON:
+{
+  "final_eccn": "3A090",
+  "confidence": "high|medium|low",
+  "classification_basis": "Detailed explanation of why this ECCN was selected",
+  "parameter_analysis": "How each parameter compares to thresholds",
+  "alternative_eccns": [{"eccn": "4A090", "reason": "why this was not selected"}],
+  "export_control_notes": "Key restrictions, license requirements, or de minimis considerations",
+  "recommendation": "Practical recommendation for the exporter"
+}`;
+      const msg = `품목: ${product}${model ? `\n모델명: ${model}` : ""}
+
+ECCN 후보군:
+${candidates.candidates.map(c => `${c.eccn}: ${c.reason}`).join("\n")}
+
+기술 파라미터 측정값:
+${paramSummary}
+
+기존 Classification 사례:
+${caseRef}`;
+
+      const result = await callClaudeJSON(sys, msg);
+      if (result?.final_eccn) {
+        setFinalResult(result);
+        setStep(4);
+      } else {
+        setError("최종 분류에 실패했습니다.");
+      }
+    } catch (e) {
+      setError("API 호출 오류: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  const allParamsHaveValues = parameters
+    ? parameters.every(p => p.params.every(pp => paramValues[pp.key]?.trim()))
+    : false;
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px" }} ref={containerRef}>
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 32 }}>
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 8,
+          background: "rgba(124,58,237,0.1)", padding: "8px 20px", borderRadius: 40,
+          border: "1px solid rgba(124,58,237,0.2)",
+        }}>
+          <span style={{ fontSize: 22 }}>🔬</span>
+          <span style={{
+            fontSize: 20, fontWeight: 700, letterSpacing: -0.5,
+            background: "linear-gradient(135deg,#c4b5fd,#a78bfa,#7c3aed)",
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+          }}>ECCN AI Classifier</span>
+        </div>
+        <p style={{ color: "#777", fontSize: 12, margin: 0, marginTop: 4 }}>
+          AI 기반 수출통제 품목분류 (EAR) · 후보 선정 → 파라미터 분석 → 자동 Classification
+        </p>
+      </div>
+
+      <StepIndicator current={step} />
+
+      {/* Step 0: Product Input */}
+      {step === 0 && (
+        <div className="card" style={{
+          background: "rgba(255,255,255,0.03)", borderRadius: 14,
+          border: "1px solid rgba(167,139,250,0.12)", padding: 24,
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: "#d8b4fe" }}>
+            🎯 분류 대상 품목 입력
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 12, color: "#999", display: "block", marginBottom: 5 }}>
+              품목 설명 <span style={{ color: "#ef4444" }}>*</span>
+            </label>
+            <input
+              className="input-field"
+              placeholder="예: GPU, AI accelerator, FPGA, 암호화 칩, 열화상 카메라..."
+              value={product}
+              onChange={(e) => setProduct(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && findCandidates()}
+            />
+          </div>
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ fontSize: 12, color: "#999", display: "block", marginBottom: 5 }}>
+              모델명 (선택 — 입력 시 스펙 자동 검색)
+            </label>
+            <input
+              className="input-field"
+              placeholder="예: NVIDIA H100, AMD MI300X, Xilinx Alveo U280..."
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && findCandidates()}
+            />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button className="btn-primary" onClick={findCandidates} disabled={!product.trim() || loading}>
+              {loading ? <Spinner /> : "ECCN 후보군 분석 →"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 1: Candidates */}
+      {step >= 1 && candidates && (
+        <div className="card" style={{
+          background: "rgba(255,255,255,0.03)", borderRadius: 14,
+          border: "1px solid rgba(167,139,250,0.12)", padding: 24, marginBottom: 16,
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: "#d8b4fe" }}>
+            📋 ECCN 후보군 ({candidates.candidates.length}건)
+          </div>
+          <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>
+            {candidates.product_summary}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {candidates.candidates.map((c, i) => (
+              <div key={i} style={{
+                display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 14px",
+                background: "rgba(255,255,255,0.02)", borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.05)",
+              }}>
+                <span style={{
+                  fontFamily: "'JetBrains Mono',monospace", fontWeight: 600, fontSize: 14,
+                  color: "#a78bfa", minWidth: 72,
+                }}>{c.eccn}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{c.title}</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>{c.reason}</div>
+                </div>
+                <span className={`badge badge-${c.likelihood}`}>{c.likelihood}</span>
+              </div>
+            ))}
+          </div>
+          {step === 1 && (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button className="btn-secondary" onClick={reset}>처음부터</button>
+              <button className="btn-primary" onClick={extractParams} disabled={loading}>
+                {loading ? <Spinner /> : "파라미터 추출 →"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 2-3: Parameters */}
+      {step >= 2 && parameters && (
+        <div className="card" style={{
+          background: "rgba(255,255,255,0.03)", borderRadius: 14,
+          border: "1px solid rgba(167,139,250,0.12)", padding: 24, marginBottom: 16,
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: "#d8b4fe" }}>
+            ⚙️ 기술 파라미터 {step >= 3 ? "값 확인" : "추출 완료"}
+          </div>
+          {parameters.map((ecGroup, gi) => (
+            <div key={gi} style={{ marginBottom: 16 }}>
+              <div style={{
+                fontSize: 13, fontWeight: 600, color: "#fbbf24", marginBottom: 8,
+                display: "flex", alignItems: "center", gap: 6,
+              }}>
+                <span style={{
+                  fontFamily: "'JetBrains Mono',monospace", background: "rgba(251,191,36,0.12)",
+                  padding: "2px 8px", borderRadius: 4,
+                }}>{ecGroup.eccn}</span>
+                판정 파라미터
+              </div>
+              {ecGroup.params.map((p, pi) => (
+                <div key={pi} style={{
+                  display: "flex", alignItems: "center", gap: 10, marginBottom: 8,
+                  padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8,
+                  flexWrap: "wrap",
+                }}>
+                  <div style={{ flex: "1 1 180px", minWidth: 150 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500 }}>{p.name}</div>
+                    <div style={{ fontSize: 10, color: "#777" }}>
+                      Threshold: {p.threshold} {p.unit}
+                    </div>
+                  </div>
+                  {step >= 3 ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}>
+                      <input
+                        className="input-field"
+                        style={{ width: 110, textAlign: "right", padding: "6px 10px", fontSize: 13 }}
+                        placeholder="값 입력"
+                        value={paramValues[p.key] || ""}
+                        onChange={(e) => setParamValues(prev => ({ ...prev, [p.key]: e.target.value }))}
+                      />
+                      <span style={{ fontSize: 11, color: "#888", minWidth: 40 }}>{p.unit}</span>
+                      {autoFilled[p.key] && (
+                        <span style={{
+                          fontSize: 9, color: "#4ade80", background: "rgba(74,222,128,0.1)",
+                          padding: "2px 6px", borderRadius: 4, whiteSpace: "nowrap",
+                        }}>auto</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: "#666" }}>{p.description}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+          {step === 2 && !loading && (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+              <button className="btn-secondary" onClick={reset}>처음부터</button>
+              <button className="btn-primary" onClick={() => {
+                if (model.trim()) {
+                  searchParamValues(parameters);
+                } else {
+                  setStep(3);
+                }
+              }} disabled={loading}>
+                {loading ? <Spinner /> : model.trim() ? "웹 검색으로 값 조회 →" : "직접 값 입력 →"}
+              </button>
+            </div>
+          )}
+          {step === 3 && !loading && (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+              <button className="btn-secondary" onClick={reset}>처음부터</button>
+              <button className="btn-primary" onClick={classify} disabled={!allParamsHaveValues || loading}>
+                {loading ? <Spinner /> : "최종 Classification 실행 →"}
+              </button>
+            </div>
+          )}
+          {loading && step < 4 && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}><Spinner /></div>
+          )}
+        </div>
+      )}
+
+      {/* Step 4: Final Result */}
+      {step >= 4 && finalResult && (
+        <div className="card" style={{
+          background: "linear-gradient(135deg,rgba(124,58,237,0.08),rgba(99,102,241,0.06))",
+          borderRadius: 14, border: "1px solid rgba(167,139,250,0.25)", padding: 24,
+          marginBottom: 16, animation: "glow 3s ease-in-out infinite",
+        }}>
+          <div style={{ textAlign: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 13, color: "#a78bfa", marginBottom: 6, fontWeight: 600, letterSpacing: 1 }}>
+              CLASSIFICATION RESULT
+            </div>
+            <div style={{
+              fontSize: 36, fontWeight: 800, fontFamily: "'JetBrains Mono',monospace",
+              background: "linear-gradient(135deg,#fbbf24,#f59e0b,#d97706)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              letterSpacing: 1,
+            }}>
+              {finalResult.final_eccn}
+            </div>
+            <span className={`badge badge-${finalResult.confidence}`} style={{ marginTop: 6, fontSize: 12 }}>
+              신뢰도: {finalResult.confidence}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {[
+              { label: "📌 분류 근거", text: finalResult.classification_basis },
+              { label: "📊 파라미터 분석", text: finalResult.parameter_analysis },
+              { label: "🚨 수출통제 참고", text: finalResult.export_control_notes },
+              { label: "💡 권고사항", text: finalResult.recommendation },
+            ].map((section, i) => (
+              <div key={i} style={{
+                padding: "12px 14px", background: "rgba(0,0,0,0.2)", borderRadius: 10,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#c4b5fd", marginBottom: 4 }}>
+                  {section.label}
+                </div>
+                <div style={{ fontSize: 13, color: "#ccc", lineHeight: 1.6 }}>{section.text}</div>
+              </div>
+            ))}
+
+            {finalResult.alternative_eccns?.length > 0 && (
+              <div style={{ padding: "12px 14px", background: "rgba(0,0,0,0.2)", borderRadius: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#c4b5fd", marginBottom: 8 }}>
+                  🔄 대안 ECCN
+                </div>
+                {finalResult.alternative_eccns.map((alt, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, fontSize: 12 }}>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: "#888" }}>{alt.eccn}</span>
+                    <span style={{ color: "#777" }}>— {alt.reason}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <CaseTable cases={KNOWN_CASES} highlight={finalResult.final_eccn?.split(".")[0]} />
+
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 20 }}>
+            <button className="btn-primary" onClick={reset} style={{ padding: "10px 32px" }}>
+              🔄 새로운 품목 분류하기
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div style={{
+          background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
+          borderRadius: 10, padding: "12px 16px", marginTop: 12, fontSize: 13, color: "#fca5a5",
+        }}>
+          ⚠️ {error}
+        </div>
+      )}
+
+      <div style={{
+        textAlign: "center", marginTop: 32, padding: "16px 0",
+        borderTop: "1px solid rgba(255,255,255,0.05)", fontSize: 10, color: "#555", lineHeight: 1.6,
+      }}>
+        ⚠️ 본 도구는 AI 기반 참고용이며, 최종 ECCN 분류는 반드시 전문가 검토 및 BIS 공식 자료를 통해 확인하세요.
+        <br />ECCN AI Classifier · Built with Claude API + Web Search
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
